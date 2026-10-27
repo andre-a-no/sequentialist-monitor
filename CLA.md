@@ -50,7 +50,7 @@ The Russian text prevails in case of discrepancy. / При расхождени�
 ### 7. Прочие условия
 7.1. Договор заключается в письменной форме путём обмена электронными документами: Участник направляет на адрес andrei@hobukob.ru скан подписанного договора или договор, подписанный электронной подписью; договор считается заключённым с момента получения Компанией такого документа.
 7.2. Договор применяется ко всем Вкладам, переданным Участником после его заключения, а также к Вкладам, перечисленным в приложении (если есть).
-7.3. Договор регулируется правом Российской Федерации. Споры рассматриваются в Арбитражном суде Республики Татарстан или в суде общей юрисдикции по месту нахождения Компании.
+7.3. Договор регулируется правом Российской Федерации.
 7.4. Лицензия, предоставленная в отношении переданного Вклада, не может быть отозвана.
 
 Участник: ____________________ / [ФИО] /   Дата: ____________
@@ -96,7 +96,7 @@ The Contribution is provided "as is", without warranty of fitness for any purpos
 ### 7. Miscellaneous
 7.1. This agreement is concluded in writing by exchange of electronic documents: the Contributor sends a scan of the signed agreement, or the agreement signed with an electronic signature, to andrei@hobukob.ru; it takes effect when the Company receives it.
 7.2. It applies to every Contribution submitted after its conclusion and to Contributions listed in an annex, if any.
-7.3. It is governed by the law of the Russian Federation. Disputes are heard by the Arbitration Court of the Republic of Tatarstan or by the court of general jurisdiction at the Company's location.
+7.3. It is governed by the law of the Russian Federation.
 7.4. The license granted for a submitted Contribution is irrevocable.
 
 Contributor: ____________________ / [name] /   Date: ____________
