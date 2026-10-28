@@ -257,6 +257,7 @@ class UnitHandler(Handler):
             "state": {"before": transition.before, "after": transition.after},
             "opc_ua": alarm.opc_ua(),
             "notify": transition.notify,
+            "chattering": alarm.chattering,
             "time": transition.time,
             "message": message(s, tag, tid, condition, transition),
         }

@@ -34,3 +34,7 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   described with warnings; CUSUM and BOCPD thresholds by simulation on
   N(0, 1) residuals, the smallest whose 95% lower bound of the ARL reaches
   the target (approximate). `sequentialist monitor budget`.
+- KPIs of alarm management from the audit log (`kpi`): annunciated alarms per
+  console per 10 minutes, floods, stale and chattering alarms, the ten most
+  frequent sources, priorities, shelving and removal from service with their
+  actors and reasons, detector alarms per hour against the budget.
