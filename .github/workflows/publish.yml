@@ -1,0 +1,96 @@
+name: publish
+
+# A tag v<version> publishes the version: to TestPyPI if it is a pre-release (v0.1.0rc1, v0.2.0b2), to PyPI
+# otherwise. Trusted publishing: no token is stored; PyPI (and TestPyPI) must list this repository, this
+# workflow (publish.yml) and the environment (testpypi, pypi) as a publisher of sequentialist-monitor. Each
+# environment asks its reviewers to approve before anything is uploaded.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      index: ${{ steps.version.outputs.index }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: the tag is the version of the package
+        id: version
+        run: |
+          python - <<'EOF'
+          import os, re
+          tag = os.environ["GITHUB_REF_NAME"]
+          text = open("src/sequentialist/monitor/version.py", encoding="utf-8").read()
+          version = re.search(r'__version__ = "([^"]+)"', text).group(1)
+          if tag != "v" + version:
+              raise SystemExit(f"the tag {tag} is not v{version}, the version in src/sequentialist/monitor/version.py")
+          index = "testpypi" if re.search(r"(a|b|rc|\.dev)\d+$", version) else "pypi"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"index={index}\n")
+          print(f"sequentialist-monitor {version} goes to {index}")
+          EOF
+      - name: sequentialist-core can be installed from the index this release goes to
+        # monitor depends on sequentialist-core>=0.1,<0.2: published before it, it could not be installed
+        run: |
+          if [ "${{ steps.version.outputs.index }}" = pypi ]; then
+            python -m pip download --no-deps --dest /tmp/core "sequentialist-core>=0.1,<0.2"
+          else
+            python -m pip download --no-deps --dest /tmp/core --index-url https://test.pypi.org/simple/ \
+              --extra-index-url https://pypi.org/simple/ "sequentialist-core>=0.1,<0.2"
+          fi
+      - run: python -m pip install build twine
+      - run: python -m build --outdir dist . && python -m twine check --strict dist/*
+      - name: the tests pass on the wheel that will be published
+        run: |
+          if [ "${{ steps.version.outputs.index }}" = pypi ]; then
+            python -m pip install "sequentialist-core>=0.1,<0.2" pyyaml
+          else
+            python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
+              "sequentialist-core>=0.1,<0.2" pyyaml
+          fi
+          python -m pip install dist/*.whl
+          python -W error::ResourceWarning -m unittest discover -s tests -t .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    if: needs.build.outputs.index == 'testpypi'
+    runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/sequentialist-monitor/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    needs: build
+    if: needs.build.outputs.index == 'pypi'
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/sequentialist-monitor/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+

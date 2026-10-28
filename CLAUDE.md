@@ -159,6 +159,21 @@ COMMERCIAL.md — фраза о сторонних компонентах под
   модели на 400 с коротких нестационарных опытов не держатся; так и
   написано в README.
 
+## Выпуск на PyPI (`.github/workflows/publish.yml`)
+
+Тег `v<версия>` публикует версию из `version.py`: пре-релиз (`a`, `b`,
+`rc`, `.dev`) — на TestPyPI, остальное — на PyPI. Тег должен совпадать с
+`__version__`, иначе workflow останавливается; перед загрузкой — сборка,
+`twine check --strict` и тесты на собранном wheel. Публикация — trusted
+publishing, без токенов; окружения GitHub `testpypi` и `pypi` с ручным
+подтверждением владельцем. Один раз владелец заводит на PyPI и TestPyPI
+«pending publisher»: репозиторий, `publish.yml`, окружение.
+
+Monitor выпускается только после core: workflow проверяет, что
+`sequentialist-core>=0.1,<0.2` скачивается с того индекса, куда идёт
+выпуск (для TestPyPI — с TestPyPI или PyPI), и ставит его оттуда же для
+тестов.
+
 ## Что есть в ядре 0.4 для monitor
 
 `procedures`: `CUSUM`, `ShiryaevRoberts` (семейства Gaussian(sigma),
