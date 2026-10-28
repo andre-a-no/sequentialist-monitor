@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sequentialist-monitor"
+dynamic = ["version"]
+description = "Monitoring of equipment, processes and energy with sequential change detection: an advisory system with alarm management after ISA-18.2"
+readme = "README.md"
+license = "AGPL-3.0-only OR LicenseRef-Commercial"  # see COMMERCIAL.md
+license-files = ["LICENSE", "COMMERCIAL.md"]
+requires-python = ">=3.8"
+authors = [{ name = "Andrej Novikov" }]
+maintainers = [{ name = "Novikov Laboratories LLC", email = "andrei@hobukob.ru" }]
+keywords = ["sequential analysis", "change detection", "condition monitoring", "alarm management", "ISA-18.2"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
+# sequentialist-core is not on PyPI yet: CI installs it from a pinned commit first
+dependencies = ["sequential-analysis>=0.4,<0.5", "sequentialist-core>=0.1,<0.2"]
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=5.1"]
+
+[project.entry-points."sequentialist.commands"]
+monitor = "sequentialist.monitor.cli:register"
+
+[project.urls]
+Source = "https://github.com/andre-a-no/sequentialist-monitor"
+Issues = "https://github.com/andre-a-no/sequentialist-monitor/issues"
+"Commercial license" = "https://github.com/andre-a-no/sequentialist-monitor/blob/main/COMMERCIAL.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "sequentialist.monitor.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["sequentialist.monitor*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"sequentialist.monitor" = ["py.typed"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # Unicode in strings and comments is intentional (math, units)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sequentialist"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731", "RUF012"]
+
+[tool.mypy]
+python_version = "3.10"  # mypy checks types only; the code runs on 3.8 (see CI)
+mypy_path = "src"
+files = ["src/sequentialist"]
+namespace_packages = true
+explicit_package_bases = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_unused_ignores = true

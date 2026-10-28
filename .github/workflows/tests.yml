@@ -1,0 +1,80 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+env:
+  # sequentialist-core is not on PyPI yet: the libraries pin a commit of it
+  CORE: "sequentialist-core @ git+https://github.com/andre-a-no/sequentialist-core@27f71847ea39cedf0a8e41a5f05042428a533443#subdirectory=packages/core"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "$CORE" && python -m pip install -e . ruff mypy vermin==1.9.0
+      - run: ruff check .
+      - run: mypy
+      # nothing newer than the declared minimum, Python 3.8
+      - run: vermin --no-tips --violations -t=3.8- src tests tools
+      - name: every source file starts with the SPDX header
+        run: python tools/check_headers.py
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      # installed, not editable: the tests run against what users get
+      - run: python -m pip install "$CORE" && python -m pip install . pyyaml
+      - run: python -W error::ResourceWarning -m unittest discover -s tests -t . -v
+
+  windows:
+    # the operating system of the plant's computers is not known yet
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "${{ env.CORE }}"
+      - run: python -m pip install . pyyaml
+      - run: python -W error::ResourceWarning -m unittest discover -s tests -t . -v
+
+  oldest:
+    # Python 3.8 and no optional dependency, from wheels (setuptools 77, needed to build, needs 3.9)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: python -m pip install build && python -m pip wheel --no-deps -w dist "$CORE" && python -m build --wheel --outdir dist .
+      - run: uv venv --python 3.8 /tmp/old && uv pip install --python /tmp/old/bin/python dist/*.whl
+      - run: /tmp/old/bin/python -W error::ResourceWarning -m unittest discover -s tests -t . -v
+
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build twine
+      - run: python -m build --outdir dist . && python -m twine check --strict dist/*
+      - name: the package leaves the sequentialist namespace open to the other libraries
+        run: |
+          python -m venv /tmp/env && /tmp/env/bin/pip install "$CORE" && /tmp/env/bin/pip install dist/*.whl
+          /tmp/env/bin/python -c "import sequentialist.monitor, sequentialist.core; import sequentialist; assert getattr(sequentialist, '__file__', None) is None"
+          /tmp/env/bin/sequentialist monitor --help
