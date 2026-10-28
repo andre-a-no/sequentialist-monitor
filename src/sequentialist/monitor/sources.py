@@ -281,16 +281,16 @@ class SqlSource:
         """Readings in the closed slice up to `until`; a unit with no cursor starts at `first`."""
         batches = _Batches(self.units, cursors)
         positions = {uid: batches.at(uid, self.name, first) for uid in self.units}
+        new = {uid for uid in self.units if self.name not in cursors.get(uid, {})}
         start = min(positions.values(), default=until)
-        if until <= start:
-            return batches.out
-        for tag, time, value, q in self.rows(start, until):
-            for uid in self.routes.get(tag, ()):
-                if time >= positions[uid]:
-                    batches.reading(uid, self.name, tag, time, value, q)
+        if until > start:
+            for tag, time, value, q in self.rows(start, until):
+                for uid in self.routes.get(tag, ()):
+                    if time >= positions[uid]:
+                        batches.reading(uid, self.name, tag, time, value, q)
         for uid in self.units:
-            if until > positions[uid]:
-                batches.cursor(uid, self.name, until)
+            if until > positions[uid] or uid in new:  # a unit's first poll fixes where it starts
+                batches.cursor(uid, self.name, max(until, positions[uid]))
         return batches.out
 
     def history(self, start: float, end: float) -> list[Record]:

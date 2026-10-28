@@ -44,3 +44,19 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   Each unit numbers its own readings and gets a cursor record with every
   batch, so a restart reads again from the earliest cursor and every unit
   sees every reading once, under the same number.
+- The service (`sequentialist monitor serve`): polls the sources, one batch
+  per unit and cycle, moves the watermarks, runs the commands of people in
+  its own thread, checkpoints the units in turn, raises the alarm
+  "@<source>" when a source cannot be read, reopens a failed task once;
+  a new spec makes a new task and people's shelving and removals from
+  service carry over to it. Actors are pseudonyms when the plant names a
+  key.
+- The HTTP API: health, units, a unit's features and alarms, alarms, KPIs,
+  and commands with a bearer token (401, 404, 409 as they apply).
+- Notifications: log, JSON lines, webhook (the audit entry, its basis the
+  fields of an OPC UA A&C event) and e-mail through `smtplib`, each taking
+  the transitions that notify, of the priorities it is given.
+- Reports in Markdown and JSON with the statements every report carries:
+  advisory, not a safety instrumented system; guarantee `model`; parameters
+  of the reference period treated as known; time to detect not guaranteed.
+- Commands: `calibrate`, `replay`, `serve`, `report`, `command`.

@@ -38,6 +38,8 @@ from .windows import Windows
 KIND = "monitor.unit/1"
 QUALITY = "quality"  # the condition of a tag's own signal: too few Good readings
 QUALITY_PRIORITY = "medium"
+SOURCE = "source"  # the condition of a source the service cannot read: alarm "@<source>"
+SOURCE_PRIORITY = "high"
 
 
 class UnitHandler(Handler):
@@ -103,6 +105,10 @@ class UnitHandler(Handler):
         if "cursor" in record.data:  # where the source has been read up to for this unit
             self.cursors[record.source] = {"position": record.data["cursor"], "next": record.seq + 1}
             return
+        if "system" in record.data:  # the service could (not) read a source
+            self.cursors[record.source] = {"position": None, "next": record.seq + 1}
+            self._source(record.data, ctx)
+            return
         dropped = self.windows.add(record.data, record.time)
         if dropped is not None:
             self.counters[dropped] += 1
@@ -112,6 +118,18 @@ class UnitHandler(Handler):
             self._close(self.windows.end(index), windows, ctx)
         for alarm in self.alarms.values():
             for transition in alarm.tick(time, self.settings):
+                self._audit(ctx, alarm, transition)
+
+    def _source(self, data: Mapping[str, Any], ctx: Context) -> None:
+        key = f"@{data['source']}"
+        alarm = self.alarms.setdefault(key, Alarm(key, SOURCE_PRIORITY))
+        time = ctx.now if ctx.now is not None else 0.0
+        if data["system"] == "source_down":
+            if not alarm.active and not alarm.out_of_service:
+                self._audit(ctx, alarm, alarm.fire(time, self.quality_settings), {"error": data.get("error")})
+        else:
+            transition = alarm.quiet_window(time, self.quality_settings)
+            if transition is not None:
                 self._audit(ctx, alarm, transition)
 
     # ------------------------------------------------------------------ a window closes
@@ -175,6 +193,7 @@ class UnitHandler(Handler):
         z = residual(f["model"], output, fed["scale"], value)
         fed["scale"] = next_scale(f["model"], output) if output is not None else None
         fed["seen"] += 1
+        fed["last"] = {"time": time, "value": value, "residual": z}
         if z is None or fed["seen"] <= self.spec["alarms"]["warmup"]:
             return
         x = detector_input(f["detector"], z)
@@ -239,7 +258,8 @@ class UnitHandler(Handler):
             if alarm.refusal(command.name, dict(command.args), self.settings) is not None:
                 continue
             transition = alarm.command(command.name, dict(command.args), time, self.settings)
-            if command.name == "return_to_service" and not alarm.source.endswith(f".{QUALITY}"):
+            if command.name == "return_to_service" and alarm.source.count(".") == 1 \
+                    and not alarm.source.endswith(f".{QUALITY}"):
                 tid, fname = alarm.source.split(".")
                 self._restart_feature(tid, fname, ctx, "returned to service")
             self._audit(ctx, alarm, transition, {"command": command.name, "args": command.args},
@@ -250,11 +270,16 @@ class UnitHandler(Handler):
     def event(self, alarm: Alarm, transition: Transition) -> dict[str, Any]:
         """The fields of an OPC UA Alarms & Conditions event for this transition."""
         s = self.spec
-        tid, condition = alarm.source.split(".")
-        tag = s["tags"][tid]
+        if alarm.source.startswith("@"):
+            tid, condition, tag = alarm.source[1:], SOURCE, {"name": None}
+            name = f"{s['site']}.{s['area']}.{s['unit']}"
+        else:
+            tid, condition = alarm.source.split(".")
+            tag = s["tags"][tid]
+            name = f"{s['site']}.{s['area']}.{s['unit']}.{tid}"
         return {
             "source": alarm.source,
-            "source_name": f"{s['site']}.{s['area']}.{s['unit']}.{tid}",
+            "source_name": name,
             "condition": condition,
             "console": s["console"],
             "priority": alarm.priority,
@@ -282,4 +307,6 @@ def message(spec: Mapping[str, Any], tag: Mapping[str, Any], tid: str, condition
     what = tag["name"] or tid
     if condition == QUALITY:
         return f"{where}: {what}: signal quality {t.event} ({t.after})"
+    if condition == SOURCE:
+        return f"{where}: source {tid} cannot be read: {t.event} ({t.after})"
     return f"{where}: {what}, window {condition}: {t.event} ({t.after})"
