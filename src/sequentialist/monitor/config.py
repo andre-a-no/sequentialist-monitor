@@ -153,14 +153,18 @@ SOURCES = {
         "columns": Field(COLUMNS, default=dict),
         "delimiter": Field(String(min_length=1, max_length=1), default=","),
         "quality_codes": Field(String(enum=QUALITY_CODES), default="text"),
-    }, doc="A directory of CSV files that are only appended to; a new file is a new source."),
+    }, doc="A directory of CSV files that are only appended to, with a header line; times are RFC 3339 with a "
+           "time zone or seconds since the epoch."),
     "sql": Object({
         "module": Field(String(pattern=r"[A-Za-z_][A-Za-z0-9_.]*"), doc="A DB-API 2.0 module, e.g. pyodbc."),
         "dsn_env": Field(String(pattern=ENV), doc="Environment variable with the connection string."),
-        "query": Field(String(min_length=1), doc="Returns tag, time, value[, quality] for times in [?, ?), "
-                                                 "ordered by time then tag; the module's paramstyle is used."),
+        "query": Field(String(min_length=1), doc="Returns tag, time, value[, quality] for times in [start, end), "
+                                                 "with the placeholders of the module's paramstyle."),
         "paramstyle": Field(Nullable(String(enum=["qmark", "format", "named", "pyformat", "numeric"])),
-                            default=None, doc="Overrides the module's paramstyle."),
+                            default=None, doc="Overrides the module's paramstyle: qmark, format and numeric get "
+                                              "the two times in order, named and pyformat as `start` and `end`."),
+        "time_param": Field(String(enum=["datetime", "epoch", "iso"]), default="datetime",
+                            doc="How the times are passed: naive UTC datetimes, seconds or ISO 8601 text."),
         "period": Field(Duration(), default=5),
         "quality_codes": Field(String(enum=QUALITY_CODES), default="opc-da"),
     }, doc="A historian polled through DB-API in closed slices of time."),

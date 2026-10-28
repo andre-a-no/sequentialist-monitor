@@ -60,6 +60,7 @@ class UnitHandler(Handler):
             self.alarms[f"{tid}.{fname}"] = Alarm(f"{tid}.{fname}", spec["tags"][tid]["features"][fname]["priority"])
         for tid in self.watched:
             self.alarms[f"{tid}.{QUALITY}"] = Alarm(f"{tid}.{QUALITY}", QUALITY_PRIORITY)
+        self.cursors: dict[str, dict[str, Any]] = {}  # source -> {"position", "next"}: see sources
         self.counters = {"late": 0, "unknown_tag": 0, "untimed": 0}
 
     # ------------------------------------------------------------------ streams and state
@@ -85,6 +86,7 @@ class UnitHandler(Handler):
             "fed": self.fed,
             "bad": self.bad,
             "alarms": {k: a.to_json() for k, a in sorted(self.alarms.items())},
+            "cursors": self.cursors,
             "counters": self.counters,
         }
 
@@ -93,10 +95,14 @@ class UnitHandler(Handler):
         self.running = state["running"]
         self.fed, self.bad, self.counters = state["fed"], state["bad"], state["counters"]
         self.alarms = {k: Alarm.from_json(a) for k, a in state["alarms"].items()}
+        self.cursors = state["cursors"]
 
     # ------------------------------------------------------------------ inputs
 
     def on_record(self, record: Record, ctx: Context) -> None:
+        if "cursor" in record.data:  # where the source has been read up to for this unit
+            self.cursors[record.source] = {"position": record.data["cursor"], "next": record.seq + 1}
+            return
         dropped = self.windows.add(record.data, record.time)
         if dropped is not None:
             self.counters[dropped] += 1

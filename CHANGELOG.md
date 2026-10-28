@@ -38,3 +38,9 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   console per 10 minutes, floods, stale and chattering alarms, the ten most
   frequent sources, priorities, shelving and removal from service with their
   actors and reasons, detector alarms per hour against the budget.
+- Sources (`sources`): a directory of CSV files (followed as they grow) and a
+  SQL historian through any DB-API 2.0 module (closed slices of time).
+  Quality codes of OPC UA, OPC DA or text become Good, Uncertain or Bad.
+  Each unit numbers its own readings and gets a cursor record with every
+  batch, so a restart reads again from the earliest cursor and every unit
+  sees every reading once, under the same number.
