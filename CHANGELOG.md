@@ -13,3 +13,18 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   `sequentialist monitor check` and `schema`.
 - The plant's budget of false alarms divided into the ARL of every detector
   stream (`budget.allocate`).
+- The task of a unit (`UnitHandler`): windows on the data's clock, closed by
+  the watermark; per feature an AR, exponential smoothing or Kalman model
+  and a CUSUM, Shiryaev-Roberts, e-detector or BOCPD on its standardized
+  one-step residual; the condition "running"; the quality of each tag's
+  signal.
+- Alarms after ISA-18.2 with the sub-states of OPC UA Alarms & Conditions:
+  acknowledgement, timed and one-shot shelving, suppression by design, out
+  of service, an off-delay before return to normal, chattering; every
+  transition an audit entry carrying the fields of an A&C event.
+- Checks against references: residuals of the true model are white, CUSUM
+  against Brook-Evans and the published ARL table, Shiryaev-Roberts and
+  e-detectors against their bounds; a detector without a model on
+  autocorrelated data breaks its ARL.
+- `tools/benchmark.py`: 2000 tags read every second keep up with a 5 s poll
+  cycle.

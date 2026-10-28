@@ -186,8 +186,10 @@ NOTIFY = OneOf("type", {
 })
 
 ALARMS = Object({
-    "clear_after": Field(Number(integer=True, minimum=1), default=10,
-                         doc="Windows of silence of a restarted detector before its alarm returns to normal."),
+    "clear_after": Field(Number(integer=True, minimum=1), default=30,
+                         doc="Off-delay: windows of silence of a restarted detector before its alarm returns to "
+                             "normal. Longer than the detector takes to fire again under a persistent shift, "
+                             "which a model's residual weakens (by 1 - phi for AR(1))."),
     "warmup": Field(Number(integer=True, minimum=0), default=10,
                     doc="Windows a model takes after a start before its residuals reach a detector."),
     "rearm": Field(Duration(), default=600, doc="Quiet time after which a chattering source notifies again."),
