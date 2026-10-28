@@ -54,7 +54,7 @@ class CommandLineTest(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_1_calibrate(self):
-        code, out, err = self.cli("calibrate", self.paths["plant.json"], "-o", self.paths["baseline.json"],
+        code, _out, err = self.cli("calibrate", self.paths["plant.json"], "-o", self.paths["baseline.json"],
                                   "--runs", "200")
         self.assertEqual(code, 0, err)
         baseline = load_baseline(self.paths["baseline.json"])
@@ -62,7 +62,7 @@ class CommandLineTest(unittest.TestCase):
         self.assertIn("threshold of cusum for ARL 360 by simulation", err)
 
     def test_2_replay_reports_the_shift_with_its_guarantee(self):
-        code, out, err = self.cli("replay", self.paths["plant.json"], "--baseline", self.paths["baseline.json"],
+        code, _out, err = self.cli("replay", self.paths["plant.json"], "--baseline", self.paths["baseline.json"],
                                   "--from", str(T0 + 3000 * WINDOW), "--to", str(T0 + 3300 * WINDOW),
                                   "-o", self.paths["replay.md"])
         self.assertEqual(code, 0, err)
@@ -95,7 +95,7 @@ class CommandLineTest(unittest.TestCase):
                                   "--to", str(T0 + 3300 * WINDOW), "--format", "json", "-o", self.paths["report.json"])
         self.assertEqual(code, 0, err)
         report = json.loads(Path(self.paths["report.json"]).read_text(encoding="utf-8"))
-        kpi = [s for s in report["sections"] if s["title"].startswith("Alarm management")][0]
+        kpi = next(s for s in report["sections"] if s["title"].startswith("Alarm management"))
         actions = [t for t in kpi["tables"] if "shelving" in t["caption"]]
         self.assertEqual(actions, [])  # an acknowledgement is not a shelving
         self.assertEqual(kpi["tables"][0]["rows"][0][0], "main")
