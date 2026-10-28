@@ -65,7 +65,7 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   Skoltech Anomaly Benchmark, downloaded when run). The README states the
   guarantees, the checks, the benchmark, the results on SKAB (false alarms
   above the design rate) and the limits of 0.1.
-- `publish.yml`: a tag v<version> publishes to TestPyPI (pre-releases) or
-  PyPI by trusted publishing, after checking that the tag is the version,
-  that sequentialist-core can be installed from that index, and that the
-  tests pass on the built wheel.
+- `publish.yml`: a published GitHub release (or a tag given by hand)
+  publishes on PyPI by trusted publishing, as sequentialist-core does, after
+  checking that the tag is the version, that sequentialist-core is on PyPI,
+  and that the tests pass on the built wheel.
