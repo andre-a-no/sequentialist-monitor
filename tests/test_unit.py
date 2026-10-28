@@ -137,7 +137,7 @@ class WindowTest(unittest.TestCase):
         spec = unit_spec()
         inputs = [*records(20), T0 + 40 * WINDOW]  # the source falls silent; time passes
         task, entries = run(spec, inputs)
-        self.assertEqual(task.handler.next_window, int(T0 / WINDOW) + 40)
+        self.assertEqual(task.handler.windows.next_window, int(T0 / WINDOW) + 40)
         self.assertEqual(len(decisions(entries, "activated", "TI-1.quality")), 1)
 
 

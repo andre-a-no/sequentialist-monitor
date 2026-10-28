@@ -19,7 +19,7 @@ every number comes from a procedure of sequential-analysis.
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Mapping
 
 from sequential_analysis import Procedure
 from sequential_analysis.procedures import (
@@ -45,7 +45,7 @@ def weakest(*guarantees: str) -> str:
     return max(guarantees, key=GUARANTEE_ORDER.index)
 
 
-def model_procedure(model: dict[str, Any]) -> Procedure | None:
+def model_procedure(model: Mapping[str, Any]) -> Procedure | None:
     """The forecaster of a fitted model (None for a feature watched without a model)."""
     kind = model["type"]
     if kind == "ar":
@@ -64,7 +64,7 @@ def model_procedure(model: dict[str, Any]) -> Procedure | None:
     raise ValueError(f"unknown model {kind!r}")
 
 
-def detector_procedure(detector: dict[str, Any], stream: str, threshold: float) -> Procedure:
+def detector_procedure(detector: Mapping[str, Any], stream: str, threshold: float) -> Procedure:
     """The detector of one stream ("up", "down" or "detector"), fed {"z": residual}."""
     kind = detector["type"]
     if kind in ("cusum", "sr"):
@@ -79,20 +79,25 @@ def detector_procedure(detector: dict[str, Any], stream: str, threshold: float) 
         return QuantileEDetector(0.0, 0.5, arl=threshold, direction=E_DIRECTIONS[detector["direction"]],
                                  statistic=detector["statistic"], input="z")
     if kind == "bocpd":
-        return BayesianChangePoint(NormalGammaModel(0.0, 1.0, 1.0, 1.0), detector["hazard"],
-                                   alarm_probability=threshold, max_hypotheses=detector["max_hypotheses"],
-                                   input="z")
+        return bocpd_procedure(detector, threshold)
     raise ValueError(f"unknown detector {kind!r}")
 
 
-def detector_input(detector: dict[str, Any], z: float) -> dict[str, float]:
+def bocpd_procedure(detector: Mapping[str, Any], alarm_probability: float | None) -> BayesianChangePoint:
+    """BOCPD on z with a normal-gamma prior centred on N(0, 1); without an alarm probability it never stops."""
+    return BayesianChangePoint(NormalGammaModel(0.0, 1.0, 1.0, 1.0), detector["hazard"],
+                               alarm_probability=alarm_probability, max_hypotheses=detector["max_hypotheses"],
+                               input="z")
+
+
+def detector_input(detector: Mapping[str, Any], z: float) -> dict[str, float]:
     if detector["type"] == "mean_e":
         c = detector["clip"]
         z = min(max(z, -c), c)
     return {"z": z}
 
 
-def residual(model: dict[str, Any], output: Any, previous_scale: float | None, value: float) -> float | None:
+def residual(model: Mapping[str, Any], output: Any, previous_scale: float | None, value: float) -> float | None:
     """The standardized one-step error of a window; None while the model cannot forecast yet."""
     kind = model["type"]
     if kind == "none":
@@ -104,7 +109,7 @@ def residual(model: dict[str, Any], output: Any, previous_scale: float | None, v
     return output.error / previous_scale
 
 
-def next_scale(model: dict[str, Any], output: Any) -> float | None:
+def next_scale(model: Mapping[str, Any], output: Any) -> float | None:
     """The standard deviation of the forecast of the next window (forecasters only)."""
     if model["type"] in ("none", "kalman_level"):
         return None

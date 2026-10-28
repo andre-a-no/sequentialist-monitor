@@ -28,3 +28,9 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   autocorrelated data breaks its ARL.
 - `tools/benchmark.py`: 2000 tags read every second keep up with a 5 s poll
   cycle.
+- Calibration on a reference period (`calibrate`): the windows are made as a
+  running unit makes them; models fitted by sequential-analysis (`fit_ar`
+  with the order by AIC, `fit_ets`) and then treated as known; residuals
+  described with warnings; CUSUM and BOCPD thresholds by simulation on
+  N(0, 1) residuals, the smallest whose 95% lower bound of the ARL reaches
+  the target (approximate). `sequentialist monitor budget`.

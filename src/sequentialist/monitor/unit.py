@@ -18,7 +18,6 @@ replay of the journal, or of recorded history, gives the same audit log.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import replace
 from typing import Any, Mapping
 
@@ -34,11 +33,11 @@ from .pipeline import (
     residual,
     weakest,
 )
+from .windows import Windows
 
 KIND = "monitor.unit/1"
 QUALITY = "quality"  # the condition of a tag's own signal: too few Good readings
 QUALITY_PRIORITY = "medium"
-GOOD, UNCERTAIN = "Good", "Uncertain"
 
 
 class UnitHandler(Handler):
@@ -46,17 +45,13 @@ class UnitHandler(Handler):
 
     def __init__(self, spec: Mapping[str, Any]):
         self.spec = dict(spec)
-        self.window = float(spec["window"])
-        self.lateness = float(spec["lateness"])
+        self.windows = Windows(spec)
         self.settings = Settings.of(spec["alarms"])
         self.quality_settings = replace(self.settings, clear_after=1)
-        self.by_source = {tag["source_tag"]: tid for tid, tag in spec["tags"].items()}
         self.watched = sorted(tid for tid, tag in spec["tags"].items() if tag["features"])
         self.features = [(tid, fname) for tid in sorted(spec["tags"])
                          for fname in sorted(spec["tags"][tid]["features"])]
-        # state
-        self.next_window: int | None = None
-        self.open: dict[str, dict[int, Window]] = {tid: {} for tid in spec["tags"]}
+        # state (and that of the windows)
         self.running: bool | None = None if spec["running"] else True
         self.fed: dict[str, dict[str, Any]] = {f"{t}.{f}": {"scale": None, "seen": 0} for t, f in self.features}
         self.bad: dict[str, int] = {tid: 0 for tid in self.watched}
@@ -85,8 +80,7 @@ class UnitHandler(Handler):
 
     def state(self) -> Any:
         return {
-            "next_window": self.next_window,
-            "open": {tid: {str(i): w.to_json() for i, w in sorted(ws.items())} for tid, ws in self.open.items()},
+            "windows": self.windows.state(),
             "running": self.running,
             "fed": self.fed,
             "bad": self.bad,
@@ -95,8 +89,7 @@ class UnitHandler(Handler):
         }
 
     def restore(self, state: Any) -> None:
-        self.next_window = state["next_window"]
-        self.open = {tid: {int(i): Window.from_json(w) for i, w in ws.items()} for tid, ws in state["open"].items()}
+        self.windows.restore(state["windows"])
         self.running = state["running"]
         self.fed, self.bad, self.counters = state["fed"], state["bad"], state["counters"]
         self.alarms = {k: Alarm.from_json(a) for k, a in state["alarms"].items()}
@@ -104,49 +97,21 @@ class UnitHandler(Handler):
     # ------------------------------------------------------------------ inputs
 
     def on_record(self, record: Record, ctx: Context) -> None:
-        tid = self.by_source.get(record.data.get("tag"))
-        if tid is None:
-            self.counters["unknown_tag"] += 1
-            return
-        if record.time is None:
-            self.counters["untimed"] += 1
-            return
-        index = math.floor(record.time / self.window)
-        if self.next_window is None:
-            self.next_window = index
-        elif index < self.next_window:  # its window is closed: later than `lateness`
-            self.counters["late"] += 1
-            return
-        window = self.open[tid].setdefault(index, Window())
-        value = record.data.get("value")
-        if self._good(tid, value, record.data.get("quality", GOOD)):
-            window.add(float(value))  # type: ignore[arg-type]
-        else:
-            window.bad += 1
-
-    def _good(self, tid: str, value: Any, quality: Any) -> bool:
-        if quality != GOOD and not (quality == UNCERTAIN and not self.spec["alarms"]["uncertain_is_bad"]):
-            return False
-        if type(value) not in (int, float) or not math.isfinite(value):
-            return False
-        limits = self.spec["tags"][tid]["range"]
-        return limits is None or limits[0] <= value <= limits[1]
+        dropped = self.windows.add(record.data, record.time)
+        if dropped is not None:
+            self.counters[dropped] += 1
 
     def on_time(self, time: float, ctx: Context) -> None:
-        if self.next_window is not None:
-            while (self.next_window + 1) * self.window + self.lateness <= time:
-                self._close(self.next_window, ctx)
-                self.next_window += 1
+        for index, windows in self.windows.close(time):
+            self._close(self.windows.end(index), windows, ctx)
         for alarm in self.alarms.values():
             for transition in alarm.tick(time, self.settings):
                 self._audit(ctx, alarm, transition)
 
     # ------------------------------------------------------------------ a window closes
 
-    def _close(self, index: int, ctx: Context) -> None:
-        end = (index + 1) * self.window
-        windows = {tid: ws.pop(index, Window()) for tid, ws in self.open.items()}
-        running = self._is_running(windows)
+    def _close(self, end: float, windows: dict[str, Window], ctx: Context) -> None:
+        running = self.windows.running(windows, self.running)
         if running != self.running:
             self._set_running(running, end, ctx)
         if not self.running:
@@ -169,15 +134,6 @@ class UnitHandler(Handler):
             for fname in sorted(self.spec["tags"][tid]["features"]):
                 if not self.alarms[f"{tid}.{fname}"].out_of_service:
                     self._feed(tid, fname, w.feature(fname), end, ctx)
-
-    def _is_running(self, windows: dict[str, Window]) -> bool | None:
-        rule = self.spec["running"]
-        if rule is None:
-            return True
-        w = windows[rule["tag"]]
-        if w.n == 0:
-            return self.running  # unknown: keep what was known
-        return w.feature("mean") > rule["above"]
 
     def _set_running(self, running: bool | None, time: float, ctx: Context) -> None:
         was = self.running

@@ -190,6 +190,12 @@ class CommandTest(unittest.TestCase):
             code, _, err = self.run_cli("monitor", "check", str(Path(d) / "bad.json"))
             self.assertEqual(code, 2)
             self.assertIn("/units/P-101/source", err)
+            code, out, _ = self.run_cli("monitor", "budget", str(Path(d) / "plant.json"),
+                                        "--baseline", str(Path(d) / "baseline.json"))
+            self.assertEqual(code, 0)
+            self.assertIn("TI-101.mean", out)
+            self.assertIn("8 (simulation)", out)
+            self.assertIn("60 (bound)", out)
         for name, cls in (("plant", PlantSpec), ("baseline", BaselineSpec), ("unit", UnitSpec)):
             code, out, _ = self.run_cli("monitor", "schema", name)
             self.assertEqual(json.loads(out)["title"], cls.kind)

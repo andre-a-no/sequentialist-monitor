@@ -8,6 +8,7 @@ entry point group ``sequentialist.commands``.
 
     sequentialist monitor check plant.yaml [--baseline baseline.json]
     sequentialist monitor schema {plant,baseline,unit}
+    sequentialist monitor budget plant.yaml [--baseline baseline.json]
 """
 from __future__ import annotations
 
@@ -60,8 +61,45 @@ def _schema(sub: Any) -> None:
     parser.set_defaults(handler=handler)
 
 
+def _budget(sub: Any) -> None:
+    parser = sub.add_parser("budget", help="the plant's budget of false alarms divided among the detectors")
+    parser.add_argument("plant")
+    parser.add_argument("--baseline", help="also show the thresholds of the calibrated units")
+
+    def handler(args: argparse.Namespace) -> int:
+        plant = load_plant(args.plant)
+        budget = plant.data["budget"]
+        allocations = allocate(plant)
+        print(f"budget: {budget['alarms_per_hour']:g} alarms per hour per console, "
+              f"{budget['detector_share']:g} of them for detectors")
+        print("expected false alarms per hour, at most, when every ARL bound holds (a long-run mean, not a "
+              "promise for every hour)")
+        thresholds: dict[tuple[str, str, str, str], tuple[float, str]] = {}
+        if args.baseline:
+            from .unitspec import build_unit_spec
+
+            baseline = load_baseline(args.baseline)
+            for uid in sorted(baseline.data["units"]):
+                tags = build_unit_spec(plant, baseline, uid, allocations).data["tags"]
+                for tid, tag in tags.items():
+                    for fname, feature in tag["features"].items():
+                        for stream, entry in feature["streams"].items():
+                            thresholds[(uid, tid, fname, stream)] = (entry["threshold"], entry["threshold_from"])
+        print(f"{'console':<10} {'unit':<12} {'feature':<24} {'stream':<9} {'window':>7} {'ARL':>10} "
+              f"{'hours':>8} {'per h':>7}  threshold")
+        for a in allocations:
+            found = thresholds.get((a.unit, a.tag, a.feature, a.stream))
+            shown = f"{found[0]:.6g} ({found[1]})" if found else "—"
+            print(f"{a.console:<10} {a.unit:<12} {a.tag + '.' + a.feature:<24} {a.stream:<9} {a.window:>6g}s "
+                  f"{a.arl:>10.6g} {a.arl * a.window / 3600:>8.4g} {a.per_hour:>7.3g}  {shown}"
+                  f"{'  (arl given)' if a.given else ''}")
+        return 0
+
+    parser.set_defaults(handler=handler)
+
+
 # each adds its parser to the subparsers of `sequentialist monitor`
-_COMMANDS: list[Callable[[Any], None]] = [_check, _schema]
+_COMMANDS: list[Callable[[Any], None]] = [_check, _schema, _budget]
 
 
 def register(commands: Any) -> None:
