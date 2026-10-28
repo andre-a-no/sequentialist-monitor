@@ -89,6 +89,17 @@ class PlantTest(unittest.TestCase):
         self.assertIn("/units", errors_of(data))
 
 
+class ExampleTest(unittest.TestCase):
+    def test_the_example_plant_is_valid(self):
+        try:
+            import yaml  # noqa: F401
+        except ImportError:
+            self.skipTest("reading YAML needs PyYAML")
+        spec = load_plant(Path(__file__).resolve().parent.parent / "examples" / "plant.yaml")
+        self.assertEqual(spec.data["units"]["P-101"]["tags"]["VI-101"]["source_tag"], "P101.VIB_RMS")
+        self.assertEqual(len(allocate(spec)), 3)
+
+
 class BudgetTest(unittest.TestCase):
     def test_closed_form(self):
         # B = 6 alarms per hour, s = 0.5, three detector streams (CUSUM up and down, one e-detector), W = 60 s:

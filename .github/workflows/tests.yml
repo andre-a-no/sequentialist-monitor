@@ -20,7 +20,7 @@ jobs:
       - run: ruff check .
       - run: mypy
       # nothing newer than the declared minimum, Python 3.8
-      - run: vermin --no-tips --violations -t=3.8- src tests tools
+      - run: vermin --no-tips --violations -t=3.8- src tests tools examples
       - name: every source file starts with the SPDX header
         run: python tools/check_headers.py
 
@@ -38,6 +38,10 @@ jobs:
       # installed, not editable: the tests run against what users get
       - run: python -m pip install "$CORE" && python -m pip install . pyyaml
       - run: python -W error::ResourceWarning -m unittest discover -s tests -t . -v
+      - name: examples
+        run: |
+          sequentialist monitor check examples/plant.yaml
+          python examples/synthetic_plant.py
 
   windows:
     # the operating system of the plant's computers is not known yet

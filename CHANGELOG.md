@@ -60,3 +60,8 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   advisory, not a safety instrumented system; guarantee `model`; parameters
   of the reference period treated as known; time to detect not guaranteed.
 - Commands: `calibrate`, `replay`, `serve`, `report`, `command`.
+- Examples: `examples/plant.yaml`; `examples/synthetic_plant.py` (a synthetic
+  pump end to end, run by CI); `examples/skab.py` (validation on the
+  Skoltech Anomaly Benchmark, downloaded when run). The README states the
+  guarantees, the checks, the benchmark, the results on SKAB (false alarms
+  above the design rate) and the limits of 0.1.

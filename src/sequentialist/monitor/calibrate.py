@@ -232,12 +232,13 @@ def _search(paths: list[tuple[list, int]], arl: float, cap: float, conservative:
 
 def calibrate(plant: PlantSpec, histories: Mapping[str, Iterable[Record]], *, created: float, runs: int = 400,
               bocpd_runs: int = 50, seed: int = 0, min_windows: int = MIN_WINDOWS,
-              previous: BaselineSpec | None = None,
+              previous: BaselineSpec | None = None, cache: dict[tuple, dict[str, Any]] | None = None,
               progress: Callable[[str], None] = lambda message: None) -> BaselineSpec:
     """A baseline for the units in `histories` (records of their reference periods); the units of `previous`
-    that are not recalibrated are kept.  SpecError lists the features that cannot be calibrated."""
+    that are not recalibrated are kept.  `cache` keeps simulated thresholds between calls (they depend only on
+    the detector, the ARL, the runs and the seed).  SpecError lists the features that cannot be calibrated."""
     allocations = allocate(plant)
-    cache: dict[tuple, dict[str, Any]] = {}
+    cache = {} if cache is None else cache
     units: dict[str, Any] = dict(previous.data["units"]) if previous is not None else {}
     errors: list[tuple[str, str]] = []
     for uid, records in sorted(histories.items()):
@@ -264,7 +265,7 @@ def calibrate(plant: PlantSpec, histories: Mapping[str, Iterable[Record]], *, cr
                 thresholds = {}
                 for a in _streams(allocations, uid, tid, fname):
                     if feature["detector"]["type"] in ("cusum", "bocpd"):
-                        key = (_detector_key(feature["detector"]), a.arl)
+                        key = (_detector_key(feature["detector"]), a.arl, runs, bocpd_runs, seed)
                         if key not in cache:
                             progress(f"  threshold of {feature['detector']['type']} for ARL {a.arl:.6g} by simulation")
                             n = runs if feature["detector"]["type"] == "cusum" else bocpd_runs

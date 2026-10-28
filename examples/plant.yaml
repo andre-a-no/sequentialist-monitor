@@ -1,0 +1,60 @@
+# A plant for sequentialist-monitor (format monitor.plant/1). Names and numbers are illustrative.
+# Check it: sequentialist monitor check examples/plant.yaml
+kind: monitor.plant/1
+site: plant-1                       # ISA-95 site
+name: Plant 1
+storage: "sqlite:monitor.db"
+window: 60s
+lateness: 30s                       # how late a reading may arrive
+budget:
+  alarms_per_hour: 6                # per console in normal operation (ISA-18.2: about 6)
+  detector_share: 0.5               # the share given to statistical detectors
+severity: {urgent: 900, high: 700, medium: 500, low: 300}   # OPC UA Severity of each priority
+consoles:
+  main: {name: Main control room}
+sources:
+  historian:
+    type: sql
+    module: pyodbc                  # any DB-API 2.0 module; installed by the plant
+    dsn_env: HISTORIAN_DSN          # the connection string is read from this variable, never written here
+    query: "SELECT tag, ts, value, quality FROM samples WHERE ts >= ? AND ts < ?"
+    quality_codes: opc-da
+    period: 5s
+  export:
+    type: csv
+    directory: /data/export
+    columns: {tag: tag, time: ts, value: value, quality: q}
+    quality_codes: text
+notify:
+  - {type: log}
+  - {type: webhook, url_env: CMMS_WEBHOOK, priorities: [urgent, high]}
+  - {type: email, smtp: "smtp.example.org:25", sender: monitor@example.org, to: [shift@example.org],
+     priorities: [urgent, high]}
+http: {host: 127.0.0.1, port: 8470, token_env: MONITOR_API_TOKEN}
+units:
+  P-101:
+    area: pumping                   # ISA-95 area
+    name: Pump P-101
+    source: historian
+    running: {tag: II-101, above: 5.0}           # the pump runs while its current is above 5 A
+    reference: {from: "2026-09-01T00:00:00Z", to: "2026-09-29T00:00:00Z"}
+    tags:
+      II-101: {name: Motor current, unit_of_measure: AMP}
+      TI-101:
+        name: Bearing temperature
+        unit_of_measure: CEL        # UNECE Recommendation 20 code
+        range: [-20, 150]           # readings outside are Bad
+        features:
+          mean:
+            model: {type: ar}                     # order chosen by AIC at calibration
+            detector: {type: cusum, shift: 1.0}   # a shift of one residual sigma
+            priority: high
+      VI-101:
+        name: Vibration
+        unit_of_measure: MMS
+        source_tag: P101.VIB_RMS    # its name in the historian
+        features:
+          max:
+            model: {type: level}
+            detector: {type: mean_e, clip: 4}
+            priority: medium
