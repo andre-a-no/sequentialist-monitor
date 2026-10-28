@@ -14,7 +14,8 @@ pipeline   window, model, residual and detector of one feature (procedures of se
 windows    readings into windows on the data's clock
 alarms     ISA-18.2 alarms with the sub-states of OPC UA Alarms & Conditions
 unit       the task of one unit (a Handler of sequentialist-core)
-sources    CSV directories and SQL historians, with cursors in the units' journals
+sources    CSV directories, SQL historians and Modbus TCP devices, with cursors in the units' journals
+modbus     a Modbus TCP client that only reads (functions 01-04), on the standard library
 service    the polling service; api: its HTTP API; notify: log, webhook, e-mail
 kpi        KPIs of alarm management; report: reports with the statements every report carries
 """
@@ -26,7 +27,7 @@ from .kpi import kpi
 from .notify import Announce, EmailSink, plant_sinks
 from .report import STATEMENTS, plant_report
 from .service import Service
-from .sources import CsvSource, SourceError, SqlSource
+from .sources import CsvSource, ModbusSource, SourceError, SqlSource
 from .unit import KIND, UnitHandler
 from .unitspec import build_unit_spec
 from .version import __version__
@@ -40,6 +41,7 @@ __all__ = [
     "BaselineSpec",
     "CsvSource",
     "EmailSink",
+    "ModbusSource",
     "PlantSpec",
     "Service",
     "SourceError",

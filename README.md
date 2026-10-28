@@ -44,7 +44,8 @@ readings ─▶ windows ─▶ model ─▶ residual z ─▶ detector ─▶ al
   an off-delay before return to normal, chattering; every transition an audit
   entry with the fields of an OPC UA Alarms & Conditions event; KPIs.
 * **Sources**: a directory of CSV files, a SQL historian through any DB-API
-  2.0 module. **Notifications**: log, JSON lines, webhook, e-mail. **A
+  2.0 module, a device read over Modbus TCP (DEIF controllers among them; see
+  below). **Notifications**: log, JSON lines, webhook, e-mail. **A
   service** with an HTTP API for status and commands; **replay** of history
   through the same code; **reports** in Markdown and JSON.
 * Python 3.8 or later, the standard library only (PyYAML for YAML specs).
@@ -118,8 +119,49 @@ StatusCode** severities (Good, Uncertain, Bad; OPC DA quality bytes and text
 are read too); names after **ISA-95** (site, area, unit, tag); the alarm life
 cycle and KPIs of **ISA-18.2 / IEC 62682**; units as **UNECE Recommendation
 20** codes; times in **ISO 8601** UTC. It *follows* them; conformance to OPC
-UA is established only by the OPC Foundation's certification. Protocols (OPC
-UA, MQTT with Sparkplug B, Modbus) are not part of 0.1.
+UA is established only by the OPC Foundation's certification. Of the
+protocols, 0.1 reads **Modbus TCP** (functions 01–04, after the MODBUS
+Application Protocol Specification V1.1b3); OPC UA and MQTT with Sparkplug B
+are not part of 0.1.
+
+## Modbus TCP devices
+
+A source of type `modbus` reads a controller, meter or gateway every
+`period`, on the standard library, and never writes to it: the package is
+advisory. Each point is a tag of the plant, placed by the register table the
+maker of the device publishes; DEIF, for one, documents the Modbus registers
+of each controller and software version. Give the address as the request
+carries it, counting from 0 (a table that counts from 1 gives one less), and
+take the type, scale and word order of 32-bit values from the table:
+
+```yaml
+sources:
+  controller-1:
+    type: modbus
+    host: 10.0.0.21            # the device, or a Modbus TCP gateway in front of a serial line
+    unit: 1                    # the unit identifier (the slave address behind a gateway)
+    period: 1s
+    word_order: big            # the high word of a 32-bit value first, unless the table says otherwise
+    points:
+      P:       {table: input, address: 520, type: int32, scale: 0.001}   # an illustration: use the
+      F:       {table: input, address: 507, type: uint16, scale: 0.01}   # addresses of your device's table
+      RUNNING: {table: discrete, address: 12}
+      ALARM-7: {table: holding, address: 1020, bit: 7}
+```
+
+A read the device refuses (exception 02, an address it does not define)
+makes its points Bad and leaves the others; a connection that fails, or a
+gateway that cannot reach the device, raises the source's alarm until a poll
+succeeds. A device keeps no history: readings are stamped with the time of
+the poll, and while the service is stopped nothing is read. To calibrate,
+record a reference period first and calibrate on it as a CSV source:
+
+```
+sequentialist monitor record plant.yaml controller-1 -o recorded/ --for 1209600
+```
+
+writes `recorded/controller-1-YYYY-MM-DD.csv` (one file per UTC day) in the
+columns a CSV source reads by default, with `quality` as text.
 
 ## Checked against references
 
@@ -137,6 +179,11 @@ UA, MQTT with Sparkplug B, Modbus) are not part of 0.1.
   55.6 hours of normal operation, within its budget of 3.
 * KPIs against counts made by hand; the alarm states against every
   transition.
+* The Modbus client against the request and response examples of the MODBUS
+  Application Protocol Specification V1.1b3 (functions 01–04, exceptions), and
+  against the server of [pymodbus](https://github.com/pymodbus-dev/pymodbus)
+  (BSD-3-Clause, an independent implementation; CI on Python 3.10 and later).
+  It has not yet been run against a DEIF controller.
 
 **On open data**: [examples/skab.py](examples/skab.py) runs the Skoltech
 Anomaly Benchmark (SKAB, GPL-3.0, downloaded when run; 34 experiments of a
@@ -171,6 +218,9 @@ and 0.72 s on Python 3.8 (at most 0.70 s and 0.95 s).
   announced. Shelve it one-shot or lengthen `clear_after`.
 * Readings that reach a historian later than `lateness` are lost; a SQL
   source is read from the service's first start, not before.
+* Modbus: TCP only (a serial line through a Modbus TCP gateway), reads only,
+  no history; points are read one after another, so a short peak between
+  polls is not seen.
 * An announcement can be lost if the process dies between a checkpoint and
   its sending; the audit entry is not.
 * A new spec makes a new task: shelving and removal from service carry over,

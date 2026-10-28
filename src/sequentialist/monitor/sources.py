@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 Novikov Laboratories LLC
 # Commercial licenses for use outside the AGPL: see COMMERCIAL.md
-"""Sources of readings: a directory of CSV files and a SQL historian through DB-API 2.0.
+"""Sources of readings: a directory of CSV files, a SQL historian through DB-API 2.0, a Modbus TCP device.
 
 Records and their identity.  A unit's task drops a record it has seen by
 (source, seq), and keeps every number it has not seen yet below the
@@ -17,7 +17,12 @@ cursor, so it sees every reading once, under the same number.
 
 Positions: for a CSV file (source ``<name>:<file>``), the byte offset after
 the last complete line read; for a SQL source, the end of the last closed
-slice of time.  Readings carry an OPC UA quality: Good, Uncertain or Bad.
+slice of time; for a Modbus source, the time of the last poll.  Readings
+carry an OPC UA quality: Good, Uncertain or Bad.
+
+A Modbus device keeps no history: its readings are stamped with the time
+of the poll, and what happens while the service is stopped is not read.
+To calibrate on it, record it first (`record`, then a CSV source).
 """
 from __future__ import annotations
 
@@ -25,13 +30,19 @@ import csv
 import datetime as _dt
 import importlib
 import io
+import logging
 import math
 import os
+import time as _time
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Union
 
 from sequentialist.core import Record, SequentialistError
 from sequentialist.core.schema import parse_timestamp
+
+from .modbus import DEVICE_DOWN, ModbusClient, ModbusError, ModbusException, Point, plan
+
+logger = logging.getLogger("sequentialist.monitor")
 
 GOOD, UNCERTAIN, BAD = "Good", "Uncertain", "Bad"
 
@@ -299,12 +310,125 @@ class SqlSource:
                                      for t, time, v, q in rows])
 
 
+class ModbusSource:
+    """A device read over Modbus TCP every poll: each point a tag, stamped with the time of the poll.
+
+    A refused read (an exception response other than a gateway's "device unreachable") makes its points Bad
+    and leaves the rest; a connection that fails, or a gateway that cannot reach the device, fails the poll.
+    """
+
+    def __init__(self, name: str, config: Mapping[str, Any], routes: Mapping[str, list[str]],
+                 connect: Callable[[], Any] | None = None, clock: Callable[[], float] = _time.time):
+        self.name, self.config, self.routes, self.clock = name, config, routes, clock
+        self.units = sorted({u for us in routes.values() for u in us})
+        points = [Point.from_config(tag, c, config["word_order"]) for tag, c in sorted(config["points"].items())]
+        self.blocks = plan(points, config["max_gap"])
+        self.client = ModbusClient(config["host"], config["port"], config["unit"], config["timeout"], connect)
+        self.refused: dict[str, str] = {}  # block -> the last exception, while it lasts
+
+    def close(self) -> None:
+        self.client.close()
+
+    def read(self) -> dict[str, tuple[float | None, str]]:
+        """Every point: (value, quality)."""
+        out: dict[str, tuple[float | None, str]] = {}
+        for block in self.blocks:
+            key = repr(block)
+            try:
+                words = self.client.read(block.table, block.start, block.count)
+            except ModbusException as error:
+                if error.code in DEVICE_DOWN:
+                    raise SourceError(f"source {self.name!r}: {block!r}: {error}") from error
+                if self.refused.get(key) != str(error):
+                    logger.error("source %r: %s: %s", self.name, key, error)
+                self.refused[key] = str(error)
+                out.update((p.name, (None, BAD)) for p in block.points)
+                continue
+            except ModbusError as error:
+                raise SourceError(f"source {self.name!r}: {error}") from error
+            self.refused.pop(key, None)
+            for p in block.points:
+                at = p.address - block.start
+                value = p.value(words[at:at + p.width])
+                out[p.name] = (value, GOOD if value is not None else BAD)
+        return out
+
+    def poll(self, cursors: Cursors) -> dict[str, list[Record]]:
+        batches = _Batches(self.units, cursors)
+        values = self.read()
+        now = self.clock()
+        for tag, (value, q) in sorted(values.items()):
+            for uid in self.routes.get(tag, ()):
+                if now > batches.at(uid, self.name, -math.inf):
+                    batches.reading(uid, self.name, tag, now, value, q)
+        for uid in self.units:
+            if now > batches.at(uid, self.name, -math.inf):
+                batches.cursor(uid, self.name, now)
+        return batches.out
+
+    def history(self, start: float, end: float) -> list[Record]:
+        raise SourceError(f"source {self.name!r}: a Modbus device keeps no history; record it with "
+                          f"`sequentialist monitor record` and calibrate on a CSV source")
+
+
+AnySource = Union[CsvSource, SqlSource, ModbusSource]
+
+
+class Recorder:
+    """Appends readings to one CSV file per UTC day, ``<name>-YYYY-MM-DD.csv``, in the columns a CSV source
+    reads by default (tag, time, value, quality as text)."""
+
+    def __init__(self, directory: str | Path, name: str):
+        self.directory, self.name = Path(directory), name
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.rows = 0
+
+    def write(self, time: float, values: Mapping[str, tuple[float | None, str]]) -> Path:
+        moment = _dt.datetime.fromtimestamp(time, _dt.timezone.utc)
+        path = self.directory / f"{self.name}-{moment.date().isoformat()}.csv"
+        stamp = moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        new = not path.exists() or path.stat().st_size == 0
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\n")
+        if new:
+            writer.writerow(["tag", "time", "value", "quality"])
+        for tag, (value, q) in sorted(values.items()):
+            writer.writerow([tag, stamp, "" if value is None else repr(value), q])
+            self.rows += 1
+        with open(path, "a", encoding="utf-8", newline="") as f:  # whole lines at once: a CSV source reads on
+            f.write(out.getvalue())
+        return path
+
+
+def record(source: ModbusSource, recorder: Recorder, *, until: float | None = None,
+           stop: Callable[[], bool] = lambda: False, sleep: Callable[[float], Any] = _time.sleep) -> int:
+    """Read `source` every period into `recorder` until `until` (a time of its clock) or `stop()`; a poll that
+    fails is logged and the next one tried.  Returns the number of polls written."""
+    period = float(source.config["period"])
+    polls = 0
+    while not stop():
+        start = source.clock()
+        if until is not None and start >= until:
+            break
+        try:
+            values = source.read()
+        except SourceError as error:
+            logger.error("%s", error)
+        else:
+            recorder.write(source.clock(), values)
+            polls += 1
+        sleep(max(0.0, start + period - source.clock()))
+    return polls
+
+
 def _renumber(source: str, records: list[Record]) -> list[Record]:
     return [Record(source, i, r.data, r.time) for i, r in enumerate(records)]
 
 
-def open_source(name: str, config: Mapping[str, Any], plant: Mapping[str, Any]) -> CsvSource | SqlSource:
+def open_source(name: str, config: Mapping[str, Any], plant: Mapping[str, Any]) -> AnySource:
     r = routes(plant, name)
     if config["type"] == "csv":
         return CsvSource(name, config, r)
+    if config["type"] == "modbus":
+        return ModbusSource(name, config, r)
     return SqlSource(name, config, r)

@@ -211,7 +211,7 @@ class Service:
 
     def _period(self) -> float:
         periods = [cfg["period"] for name, cfg in self.plant.data["sources"].items()
-                   if name in self.sources and cfg["type"] == "sql"]
+                   if name in self.sources and cfg["type"] in ("sql", "modbus")]
         return float(min(periods)) if periods else 5.0
 
     # ------------------------------------------------------------------ commands of people

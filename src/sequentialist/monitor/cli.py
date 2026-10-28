@@ -14,6 +14,7 @@ entry point group ``sequentialist.commands``.
     sequentialist monitor serve plant.yaml [--baseline baseline.json] [--shard i/n]
     sequentialist monitor report plant.yaml --from T --to T [--baseline baseline.json] [--format md|json]
     sequentialist monitor command plant.yaml UNIT COMMAND --source S --actor A --reason R [--duration D]
+    sequentialist monitor record plant.yaml SOURCE -o DIR [--for SECONDS]
 
 Times are RFC 3339 with a time zone (2026-11-01T00:00:00Z) or seconds since the epoch.
 """
@@ -322,8 +323,48 @@ def _serve(sub: Any) -> None:
     parser.set_defaults(handler=handler)
 
 
+def _record(sub: Any) -> None:
+    parser = sub.add_parser("record", help="read a Modbus source every period into CSV files (a reference "
+                                           "period for calibration: a device keeps no history)")
+    parser.add_argument("plant")
+    parser.add_argument("source")
+    parser.add_argument("-o", "--output", required=True, help="directory of the CSV files, one per UTC day")
+    parser.add_argument("--for", dest="duration", type=float, default=None,
+                        help="seconds to record; without it, until interrupted")
+
+    def handler(args: argparse.Namespace) -> int:
+        import signal
+        import threading
+
+        from .sources import ModbusSource, Recorder, record
+
+        plant = load_plant(args.plant)
+        config = plant.data["sources"].get(args.source)
+        if config is None or config["type"] != "modbus":
+            print(f"error: {args.source!r} is not a Modbus source of the plant", file=sys.stderr)
+            return 2
+        source = ModbusSource(args.source, config, {})
+        stopped = threading.Event()
+
+        def stop(*_: Any) -> None:
+            stopped.set()
+
+        signal.signal(signal.SIGINT, stop)
+        until = source.clock() + args.duration if args.duration is not None else None
+        recorder = Recorder(args.output, args.source)
+        try:
+            polls = record(source, recorder, until=until, stop=stopped.is_set, sleep=stopped.wait)
+        finally:
+            source.close()
+        print(f"{polls} polls, {recorder.rows} readings in {args.output}", file=sys.stderr)
+        return 0
+
+    parser.set_defaults(handler=handler)
+
+
 # each adds its parser to the subparsers of `sequentialist monitor`
-_COMMANDS: list[Callable[[Any], None]] = [_check, _schema, _budget, _calibrate, _replay, _serve, _report, _command]
+_COMMANDS: list[Callable[[Any], None]] = [_check, _schema, _budget, _calibrate, _replay, _serve, _report, _command,
+                                          _record]
 
 
 def register(commands: Any) -> None:

@@ -65,6 +65,14 @@ First version, on sequential-analysis 0.4 and sequentialist-core 0.1.
   Skoltech Anomaly Benchmark, downloaded when run). The README states the
   guarantees, the checks, the benchmark, the results on SKAB (false alarms
   above the design rate) and the limits of 0.1.
+- A Modbus TCP source (`type: modbus`) on the standard library: functions 01-04
+  only (it never writes), points placed by the device's register table (DEIF
+  controllers among them), types bool, 16- and 32-bit integers and float32,
+  word order, scale, offset, bits of a register; reads grouped within the
+  protocol's limits. A refused read makes its points Bad; a failed connection
+  raises the source's alarm. `sequentialist monitor record` writes a device's
+  readings to CSV files for calibration. Checked against the examples of the
+  Modbus specification and the server of pymodbus.
 - `publish.yml`: a published GitHub release (or a tag given by hand)
   publishes on PyPI by trusted publishing, as sequentialist-core does, after
   checking that the tag is the version, that sequentialist-core is on PyPI,

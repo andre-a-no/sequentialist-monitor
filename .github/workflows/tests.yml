@@ -37,6 +37,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # installed, not editable: the tests run against what users get
       - run: python -m pip install "$CORE" && python -m pip install . pyyaml
+      - name: pymodbus, the reference server of the Modbus tests (Python 3.10 and later)
+        if: matrix.python-version != '3.9'
+        run: python -m pip install pymodbus==3.16.1
       - run: python -W error::ResourceWarning -m unittest discover -s tests -t . -v
       - name: examples
         run: |

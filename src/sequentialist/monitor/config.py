@@ -37,6 +37,8 @@ from sequentialist.core.schema import (
     Timestamp,
 )
 
+from .modbus import Point
+
 ID = r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}"
 ENV = r"[A-Za-z_][A-Za-z0-9_]*"
 FEATURES = ("mean", "range", "max", "min")
@@ -146,6 +148,22 @@ COLUMNS = Object({
     "quality": Field(Nullable(String(min_length=1)), default=None),
 })
 
+SOURCE_TAG = r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}"
+
+MODBUS_POINT = Object({
+    "table": Field(String(enum=["coil", "discrete", "input", "holding"]),
+                   doc="coil (01), discrete input (02), holding register (03) or input register (04)."),
+    "address": Field(Number(integer=True, minimum=0, maximum=65535),
+                     doc="The address in the PDU, from 0 (a table that counts from 1 gives one less)."),
+    "type": Field(Nullable(String(enum=["bool", "uint16", "int16", "uint32", "int32", "float32"])), default=None,
+                  doc="bool for coils, discrete inputs and bits; uint16 for a register by default."),
+    "bit": Field(Nullable(Number(integer=True, minimum=0, maximum=15)), default=None,
+                 doc="A bit of a register, 0 the least significant: a status or alarm flag."),
+    "word_order": Field(Nullable(String(enum=["big", "little"])), default=None),
+    "scale": Field(Number(), default=1.0, doc="value = raw * scale + offset"),
+    "offset": Field(Number(), default=0.0),
+})
+
 SOURCES = {
     "csv": Object({
         "directory": Field(String(min_length=1)),
@@ -168,6 +186,19 @@ SOURCES = {
         "period": Field(Duration(), default=5),
         "quality_codes": Field(String(enum=QUALITY_CODES), default="opc-da"),
     }, doc="A historian polled through DB-API in closed slices of time."),
+    "modbus": Object({
+        "host": Field(String(min_length=1), doc="Host name or address of the device or Modbus TCP gateway."),
+        "port": Field(Number(integer=True, minimum=1, maximum=65535), default=502),
+        "unit": Field(Number(integer=True, minimum=0, maximum=255), default=1,
+                      doc="Unit identifier (the slave address behind a gateway)."),
+        "timeout": Field(Duration(), default=2),
+        "period": Field(Duration(), default=1),
+        "word_order": Field(String(enum=["big", "little"]), default="big",
+                            doc="Order of the two registers of a 32-bit value: big, the high word first."),
+        "max_gap": Field(Number(integer=True, minimum=0, maximum=124), default=0,
+                         doc="Unused addresses a read may span to join two points; 0 reads only what is asked."),
+        "points": Field(Map(MODBUS_POINT, key_pattern=SOURCE_TAG), doc="Source tag -> where it is."),
+    }, doc="A device read over Modbus TCP (functions 01-04 only), from the register table its maker publishes."),
 }
 
 NOTIFY = OneOf("type", {
@@ -280,6 +311,20 @@ class PlantSpec(Spec):
                         out.append((f"{at}/guarantee", "only a detector without a model takes guarantee: none"))
                     if feature["detector"]["type"] == "bocpd":
                         bocpd += 1
+        for name, source in self.data["sources"].items():
+            if source["type"] != "modbus":
+                continue
+            for tag, point in source["points"].items():
+                try:
+                    Point.from_config(tag, point, source["word_order"])
+                except ValueError as error:
+                    out.append((f"/sources/{name}/points/{tag}", str(error)))
+            for uid, unit in self.data["units"].items():
+                if unit["source"] == name:
+                    for tid, tag in unit["tags"].items():
+                        if (tag["source_tag"] or tid) not in source["points"]:
+                            out.append((f"/units/{uid}/tags/{tid}", f"source {name!r} has no point "
+                                                                    f"{tag['source_tag'] or tid!r}"))
         if bocpd > MAX_BOCPD:
             out.append(("/units", f"{bocpd} BOCPD detectors; at most {MAX_BOCPD} per plant (each step costs "
                                   f"milliseconds)"))
