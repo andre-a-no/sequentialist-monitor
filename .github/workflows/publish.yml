@@ -1,0 +1,57 @@
+name: publish
+
+# Publishes a release on PyPI by trusted publishing (no token), as sequentialist-core does: PyPI accepts the
+# upload because it comes from this workflow of andre-a-no/sequentialist-monitor in the environment "pypi".
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag of the release to publish, for example v0.1.0"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: the tag names the version of the package
+        run: |
+          version=$(python -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/sequentialist/monitor/version.py').read()).group(1))")
+          echo "tag $TAG, version $version"
+          test "$TAG" = "v$version"
+      - name: sequentialist-core is on PyPI
+        # monitor depends on sequentialist-core>=0.1,<0.2: published before it, it could not be installed
+        run: python -m pip download --no-deps --dest /tmp/core "sequentialist-core>=0.1,<0.2"
+      - run: python -m pip install build twine && python -m build --outdir dist . && python -m twine check --strict dist/*
+      - name: the tests pass on the wheel that is published
+        run: |
+          python -m venv /tmp/env && /tmp/env/bin/pip install dist/*.whl pyyaml
+          /tmp/env/bin/python -W error::ResourceWarning -m unittest discover -s tests -t .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/sequentialist-monitor/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
