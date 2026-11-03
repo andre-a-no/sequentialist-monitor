@@ -237,3 +237,10 @@ Contributions need the [Contributor License Agreement](CLA.md); see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Contact: andrei@hobukob.ru, a.hobukob@gmail.com.
+
+## Overview and AI-assisted reading
+
+For a plain-language explanation and common questions, see the
+[overview](docs/overview.md) or [обзор на русском](docs/overview.ru.md). The [curated source index](llms.txt) links to
+implementation and examples; [AGENTS.md](AGENTS.md) gives coding-assistant
+guidance alongside the preserved owner instructions.

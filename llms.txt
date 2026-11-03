@@ -1,0 +1,26 @@
+# sequentialist-monitor
+
+> Advisory equipment/process monitoring with sequential change detection, alarm management, replay and audit.
+
+## Start here
+
+- [Обзор и частые вопросы — Русский](https://github.com/andre-a-no/sequentialist-monitor/blob/main/docs/overview.ru.md): Russian-language introduction, workflow and limitations.
+- [Overview and FAQ](https://github.com/andre-a-no/sequentialist-monitor/blob/main/docs/overview.md): plain-language purpose, workflow, limits and source references.
+- [README](https://github.com/andre-a-no/sequentialist-monitor/blob/main/README.md): current capabilities and installation.
+- [Project metadata](https://github.com/andre-a-no/sequentialist-monitor/blob/main/pyproject.toml): package identity, dependencies and compatibility.
+
+## Implementation and examples
+
+- [Pipeline implementation](https://github.com/andre-a-no/sequentialist-monitor/blob/main/src/sequentialist/monitor/pipeline.py): attributable implementation or example.
+- [Alarm lifecycle](https://github.com/andre-a-no/sequentialist-monitor/blob/main/src/sequentialist/monitor/alarms.py): attributable implementation or example.
+- [Synthetic plant example](https://github.com/andre-a-no/sequentialist-monitor/blob/main/examples/synthetic_plant.py): attributable implementation or example.
+- [Read-only Modbus adapter](https://github.com/andre-a-no/sequentialist-monitor/blob/main/src/sequentialist/monitor/modbus.py): attributable implementation or example.
+
+## Development
+
+- [Coding guidance](https://github.com/andre-a-no/sequentialist-monitor/blob/main/AGENTS.md): repository map and checks.
+- [Owner guidance](https://github.com/andre-a-no/sequentialist-monitor/blob/main/CLAUDE.md): preserved project rules.
+- [Contributing](https://github.com/andre-a-no/sequentialist-monitor/blob/main/CONTRIBUTING.md): development and licensing.
+- [Tests](https://github.com/andre-a-no/sequentialist-monitor/tree/main/tests): checked behavior.
+
+This is a curated navigation aid. It does not assert that any model or search engine automatically consumes it. Cite the linked source and retain its assumptions and release status.
